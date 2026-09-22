@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>价格走势看板（需密码）</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f4f2;
+      --card: #fff;
+      --text: #2b2b2b;
+      --muted: #8a8178;
+      --line: #efe8e2;
+      --orange: #f08a2a;
+      --orange-deep: #e56b12;
+      --yellow: #f5c84b;
+      --cream: #fff6ea;
+      --up: #d9480f;
+      --down: #2b8a3e;
+    }
+    * { box-sizing: border-box; }
+    body.locked .wrap { display: none; }
+    #gate { display: none; }
+    body.locked #gate {
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .gate-card {
+      width: 100%;
+      max-width: 380px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 24px 24px;
+    }
+    .gate-card h1 { font-size: 22px; margin: 0 0 6px; }
+    .gate-card .sub { margin: 0 0 18px; }
+    .gate-card input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #eadfd4;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-family: inherit;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .gate-card button {
+      width: 100%;
+      height: 40px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--orange);
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .gate-card button:hover { background: var(--orange-deep); }
+    .gate-err { color: #d9480f; font-size: 13px; min-height: 20px; margin: 0 0 8px; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px 64px; }
+    .board-tabs {
+      display: flex;
+      background: #fff;
+      border: 1px solid #e6e9f2;
+      border-radius: 16px;
+      padding: 6px;
+      margin: 18px 0 8px;
+      gap: 4px;
+    }
+    .board-tab {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      color: #5c657c;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .board-tab:hover:not(.on) { background: #f4f6fb; }
+    .board-tab.on {
+      background: #3f4a73;
+      color: #fff;
+      font-weight: 600;
+    }
+    .board { display: none; }
+    .board.on { display: block; }
+    h1 { font-size: 26px; margin: 0 0 6px; }
+    h2 { font-size: 18px; margin: 28px 0 10px; }
+    .sub, .note { color: var(--muted); font-size: 13px; }
+    .note { margin: 6px 0 12px; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .kpi {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .kpi b { display: block; font-size: 18px; }
+    .kpi span { font-size: 12px; color: var(--muted); }
+    .kpi.up b { color: var(--up); }
+    .kpi.down b { color: var(--down); }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+    .pill {
+      border: 1px solid #f3d2b3;
+      background: #fff;
+      color: var(--orange-deep);
+      border-radius: 999px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .pill.on {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: #fff;
+    }
+    .pill.sm { padding: 4px 10px; font-size: 12px; color: #7a6554; border-color: #eadfd4; }
+    .pill.sm.on { background: #7a6554; border-color: #7a6554; color: #fff; }
+    .pill.plat { min-width: 52px; }
+    .pill.plat.on { background: var(--orange); border-color: var(--orange); color: #fff; }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 4px;
+    }
+    .filter-row label { font-size: 13px; color: var(--muted); }
+    select {
+      flex: 1;
+      min-width: 240px;
+      height: 36px;
+      border: 1px solid #eadfd4;
+      border-radius: 8px;
+      padding: 0 10px;
+      font-family: inherit;
+      font-size: 13px;
+      background: #fff;
+    }
+    .section-head, .hero-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .section-head.sticky {
+      position: sticky;
+      top: 0;
+      z-index: 8;
+      background: var(--bg);
+      padding: 10px 0 8px;
+      margin: 0;
+    }
+    .section-head h2 { margin: 0; }
+    .hero {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px 12px;
+      margin-top: 12px;
+    }
+    .hero-head { margin-bottom: 6px; }
+    .hero-head h2 {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .seg {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .date-filter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .date-filter input[type="date"] {
+      height: 32px;
+      border: 1px solid #eadfd4;
+      border-radius: 8px;
+      padding: 0 8px;
+      font-family: inherit;
+      font-size: 13px;
+      color: var(--text);
+      background: #fff;
+      color-scheme: light;
+    }
+    .date-filter .date-sep { color: var(--muted); }
+    .filters-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-go {
+      height: 32px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--orange);
+      color: #fff;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .btn-go:hover { background: var(--orange-deep); }
+    .alert {
+      background: var(--cream);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #9a6b2f;
+      margin: 12px 0 8px;
+    }
+    .alert.ok { background: #eef8f0; color: #2b8a3e; }
+    .sku-lines { margin: 4px 0 14px; }
+    .sku-line { font-size: 13px; color: var(--muted); line-height: 1.75; }
+    .sku-line .k {
+      display: inline-block;
+      min-width: 36px;
+      margin-right: 8px;
+      color: #6b625a;
+      font-weight: 600;
+    }
+    .sku-line.product { color: var(--text); font-size: 14px; }
+    .price-line { font-size: 14px; margin: 0 0 8px; }
+    .price-line .old { color: var(--orange); font-weight: 700; }
+    .price-line .now { color: var(--orange-deep); font-weight: 700; }
+    .chart-box { position: relative; height: 300px; overflow: visible; }
+    .chart-box.mini { height: 210px; }
+    .gallery-head h2 { margin: 0; }
+    .bundle-label {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 22px 0 10px;
+      color: #3f4a73;
+    }
+    .product-group { margin-bottom: 14px; }
+    .product-group-head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .product-group-head b { font-size: 14px; }
+    .product-group-head span { font-size: 12px; color: var(--muted); }
+    .product-row {
+      display: grid;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .sku-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 12px 8px;
+      min-width: 0;
+    }
+    .sku-card b { display: block; font-size: 13px; }
+    .sku-card .meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 2px 0 8px;
+    }
+    .plat-tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-right: 4px;
+      font-weight: 600;
+    }
+    .plat-tag.tk { background: #fff6d8; color: #b8860b; }
+    .plat-tag.sp { background: #fff1e6; color: #e56b12; }
+    .empty-card {
+      font-size: 13px;
+      color: var(--muted);
+      padding: 28px 8px;
+      text-align: center;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+    .dot.circle { border-radius: 50%; }
+    .dot.tk-dot { background: #ffd400; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #ffd400; }
+    .dot.sp-dot { background: #ff4d2e; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #ff4d2e; }
+    .gap-bar {
+      display: inline-block;
+      width: 3px;
+      height: 14px;
+      margin: 0 6px 0 2px;
+      background: #4c6fff;
+      border-radius: 2px;
+      vertical-align: middle;
+    }
+    .compare-guide {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      align-items: center;
+      background: #eef2ff;
+      border: 1px solid #d8e0ff;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin: 12px 0 4px;
+      font-size: 13px;
+      color: #3f4a73;
+    }
+    .compare-guide b { color: #1f2a4a; }
+    .gap-line {
+      font-size: 12px;
+      font-weight: 700;
+      margin: 4px 0 2px;
+    }
+    .gap-line.tk { color: #e6a800; }
+    .gap-line.sp { color: #ff4d2e; }
+    .gap-line.same { color: var(--muted); font-weight: 500; }
+    .sku-card.compare-card { background: #f7f8fc; }
+    table { display: none; }
+    .foot { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    @media (max-width: 820px) {
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .chart-box { height: 250px; }
+      .chart-box.mini { height: 190px; }
+      .product-row { grid-template-columns: 1fr !important; }
+      .board-tab { font-size: 12px; padding: 10px 6px; }
+    }
+  </style>
+</head>
+<body class="locked">
+  <div id="gate">
+    <form class="gate-card" id="gateForm">
+      <h1>价格走势看板</h1>
+      <p class="sub">请输入密码后查看。没有密码无法看到套组价格。</p>
+      <p class="gate-err" id="gateErr"></p>
+      <input id="gatePw" type="password" autocomplete="current-password" placeholder="密码" />
+      <button type="submit">进入看板</button>
+    </form>
+  </div>
+  <div class="wrap">
+    <h1>价格走势看板</h1>
+    <p class="sub">按套组查看 3.1 至 9.18 各期售价。SP 最新一期为 9.17。同一正品、不同赠品并排对比。可看全部走势、双平台价差，或筛选单个报价。</p>
+    <p class="note">来源：价格波动测试表.xlsx · TK / SP 两个工作表 · 55 个报价 · 单位印尼盾 (Rp) · 7 期快照 · 最新一期 TK 为 9.18、SP 为 9.17</p>
+
+    <nav class="board-tabs" id="boardTabs">
+      <button type="button" class="board-tab on" data-board="gallery">① 全部价格波动</button>
+      <button type="button" class="board-tab" data-board="compare">② 双平台对比价格</button>
+      <button type="button" class="board-tab" data-board="trend">③ 可筛选价格波动</button>
+    </nav>
+
+    <section class="board on" id="board-gallery">
+      <div class="section-head sticky gallery-head">
+        <h2>全部价格波动 <span class="hint">同正品、不同赠品排在同一行</span></h2>
+        <div class="filters-bar">
+          <div class="date-filter">
+            <input type="date" id="gDateFrom" />
+            <span class="date-sep">–</span>
+            <input type="date" id="gDateTo" />
+          </div>
+          <div class="seg" id="gPlatformPills"></div>
+          <span class="hint plat-hint">可单选或双选</span>
+          <button type="button" class="btn-go" id="gApplyBtn">确定</button>
+        </div>
+      </div>
+      <p class="note" id="gFilterNote"></p>
+      <div id="skuGallery"></div>
+    </section>
+
+    <section class="board" id="board-compare">
+      <div class="section-head sticky gallery-head">
+        <h2>双平台对比价格 <span class="hint">同一日期上对比 TK 与 SP</span></h2>
+        <div class="filters-bar">
+          <div class="date-filter">
+            <input type="date" id="cDateFrom" />
+            <span class="date-sep">–</span>
+            <input type="date" id="cDateTo" />
+          </div>
+          <button type="button" class="btn-go" id="cApplyBtn">确定</button>
+        </div>
+      </div>
+      <div class="compare-guide">
+        <b>每一个日期</b>
+        <span><i class="dot circle tk-dot"></i>金色点 = TK</span>
+        <span><i class="dot circle sp-dot"></i>橙色点 = SP</span>
+        <span><i class="gap-bar"></i>中间竖线 = 两个平台价格差</span>
+      </div>
+      <p class="note" id="cFilterNote"></p>
+      <div class="kpis" id="cKpis"></div>
+      <div class="pills" id="cBundlePills"></div>
+      <div class="pills" id="cGapPills"></div>
+      <div id="compareGallery"></div>
+    </section>
+
+    <section class="board" id="board-trend">
+      <div class="section-head sticky">
+        <h2>可筛选价格波动 <span class="hint">按套组分类查看单个报价</span></h2>
+        <div class="filters-bar">
+          <div class="date-filter">
+            <input type="date" id="dateFrom" />
+            <span class="date-sep">–</span>
+            <input type="date" id="dateTo" />
+          </div>
+          <div class="seg" id="platformPills"></div>
+          <span class="hint plat-hint">可单选或双选</span>
+          <button type="button" class="btn-go" id="applyBtn">确定</button>
+        </div>
+      </div>
+      <div class="kpis" id="allKpis"></div>
+      <div class="pills" id="bundlePills"></div>
+      <div class="pills" id="typePills"></div>
+      <div class="filter-row">
+        <label id="productLabel">产品</label>
+        <select id="productSelect"></select>
+      </div>
+      <div class="hero">
+        <div class="hero-head">
+          <h2>价格走势 <span class="hint">价格为商品勾选前的套组售价</span></h2>
+        </div>
+        <p class="price-line" id="priceLine"></p>
+        <div class="alert" id="alertBox"></div>
+        <div class="sku-lines" id="skuMeta"></div>
+        <div class="kpis" id="skuKpis"></div>
+        <div class="chart-box"><canvas id="comboChart"></canvas></div>
+        <div class="legend" id="chartLegend"></div>
+        <p class="foot" id="chartFoot">X 轴：价格变动日期 · Y 轴：价格 (Rp) · 可能和其他商品一起共享优惠，实际以下单页为准</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const BUNDLES = ["单品", "双品", "三合一", "四合一", "豪华礼盒", "周边", "小样"];
+    /** [套组, 类型, 产品, 赠品, TK[3.1..9.18], SP[3.1..9.17]] */
+    let RAW = [];
+
+    const SNAPSHOTS = [
+      { date: "2026-03-01", field: "p31" },
+      { date: "2026-04-13", field: "p413" },
+      { date: "2026-05-02", field: "p52" },
+      { date: "2026-06-05", field: "p65" },
+      { date: "2026-07-20", field: "p720" },
+      { date: "2026-08-10", field: "p810" },
+      { date: "2026-09-18", field: "p918", label: "9.17/9.18" }
+    ];
+    const PLATFORMS = ["TK", "SP"];
+    const BAR_COLORS = ["#f8d56a", "#f5c84b", "#f2b03a", "#f08a2a", "#e56b12", "#d45a10", "#c44a0c"];
+    const PLATFORM_STYLE = {
+      TK: { bar: "#f5c84b", line: "#c79212", tag: "tk" },
+      SP: { bar: "#f08a2a", line: "#d45a10", tag: "sp" }
+    };
+
+    let SKUS = [];
+    function buildSkus() {
+    SKUS = RAW.map((r, i) => {
+      const toFields = (a) => ({
+        p31: a[0], p413: a[1], p52: a[2], p65: a[3],
+        p720: a[4], p810: a[5], p918: a[6]
+      });
+      return {
+        id: String(i),
+        bundle: r[0],
+        type: r[1],
+        product: r[2],
+        gift: r[3],
+        platforms: { TK: toFields(r[4]), SP: toFields(r[5]) }
+      };
+    });
+    }
+
+    function copyFilter(f) {
+      return { from: f.from, to: f.to, platforms: f.platforms.slice() };
+    }
+    const defaultFilter = () => ({ from: "", to: "", platforms: ["TK", "SP"] });
+    const draft = { gallery: defaultFilter(), compare: defaultFilter(), trend: defaultFilter() };
+    const applied = { gallery: defaultFilter(), compare: defaultFilter(), trend: defaultFilter() };
+    const state = { board: "gallery", bundle: "单品", type: "全部", id: "0", compareBundle: "全部", compareOnlyGap: false };
+    let comboChart;
+    let galleryCharts = [];
+    let compareCharts = [];
+
+    const rp = (n) => "Rp " + Number(n).toLocaleString("en-US");
+    const rpChart = (n) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n));
+    const signed = (n) => (n > 0 ? "+" : n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US");
+    const pct = (a, b) => (a === 0 ? 0 : ((b - a) / a) * 100);
+    const dateShort = (iso) => {
+      const snap = SNAPSHOTS.find((s) => s.date === iso);
+      if (snap && snap.label) return snap.label;
+      const parts = iso.split("-");
+      return String(Number(parts[1])) + "." + String(Number(parts[2]));
+    };
+    const platTags = (plats) => plats.map((p) =>
+      `<span class="plat-tag ${PLATFORM_STYLE[p].tag}">${p}</span>`
+    ).join("");
+    const labelOf = (s) => s.gift ? s.product + " ｜ 赠 " + s.gift : s.product;
+
+    function todayISO() {
+      const d = new Date();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return d.getFullYear() + "-" + m + "-" + day;
+    }
+    function readDates(fromId, toId) {
+      let from = document.getElementById(fromId).value;
+      let to = document.getElementById(toId).value;
+      if (from && to && from > to) {
+        const tmp = from;
+        from = to;
+        to = tmp;
+        document.getElementById(fromId).value = from;
+        document.getElementById(toId).value = to;
+      }
+      return { from, to };
+    }
+    function snapshotSeries(filter) {
+      let from = filter.from;
+      let to = filter.to;
+      if (from && to && from > to) {
+        const tmp = from;
+        from = to;
+        to = tmp;
+      }
+      return SNAPSHOTS.filter((s) => {
+        if (from && s.date < from) return false;
+        if (to && s.date > to) return false;
+        return true;
+      });
+    }
+    function avgPrice(sku, plats, field) {
+      const vals = plats.map((p) => sku.platforms[p][field]);
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    function skuPoints(sku, filter) {
+      return snapshotSeries(filter).map((s) => {
+        const o = { label: dateShort(s.date), date: s.date, field: s.field };
+        filter.platforms.forEach((p) => { o[p] = sku.platforms[p][s.field]; });
+        o.price = avgPrice(sku, filter.platforms, s.field);
+        return o;
+      });
+    }
+    function comparePoints(sku, filter) {
+      return snapshotSeries(filter).map((s) => {
+        const tk = sku.platforms.TK[s.field];
+        const sp = sku.platforms.SP[s.field];
+        return {
+          label: dateShort(s.date),
+          date: s.date,
+          field: s.field,
+          TK: tk,
+          SP: sp,
+          gap: tk - sp,
+          absGap: Math.abs(tk - sp)
+        };
+      });
+    }
+    function skuHasGap(sku, filter) {
+      return comparePoints(sku, filter).some((p) => p.absGap > 0);
+    }
+    function inBundle() {
+      return SKUS.filter((s) => s.bundle === state.bundle);
+    }
+    function typesOf() {
+      return [...new Set(inBundle().map((s) => s.type).filter(Boolean))];
+    }
+    function filtered() {
+      const rows = inBundle();
+      if (state.type === "全部" || typesOf().length === 0) return rows;
+      return rows.filter((s) => s.type === state.type);
+    }
+    function current() {
+      const rows = filtered();
+      return rows.find((s) => s.id === state.id) || rows[0];
+    }
+    function kpiHtml(items) {
+      return items.map((k) =>
+        `<div class="kpi ${k.cls || ""}"><b>${k.value}</b><span>${k.label}</span></div>`
+      ).join("");
+    }
+    function filterNote(filter) {
+      const snaps = snapshotSeries(filter);
+      const plats = filter.platforms.join("、");
+      const from = filter.from ? dateShort(filter.from) : "起始";
+      const to = filter.to ? dateShort(filter.to) : "至今";
+      return `已筛选 ${from} 至 ${to} · 平台 ${plats} · 含 ${snaps.length} 期快照`;
+    }
+    function renderPlatformPills(elId, scope) {
+      const selected = draft[scope].platforms;
+      document.getElementById(elId).innerHTML = PLATFORMS.map((p) =>
+        `<button type="button" class="pill sm plat ${selected.includes(p) ? "on" : ""}" data-scope="${scope}" data-p="${p}" title="${selected.includes(p) && selected.length === 2 ? "再点一次只看 " + p : selected.includes(p) ? "当前只看 " + p : "加上 " + p}">${p}</button>`
+      ).join("");
+    }
+    function togglePlatform(scope, p) {
+      const list = draft[scope].platforms.slice();
+      const i = list.indexOf(p);
+      if (i >= 0) {
+        if (list.length === 1) return;
+        draft[scope].platforms = [p];
+      } else {
+        list.push(p);
+        list.sort((a, b) => PLATFORMS.indexOf(a) - PLATFORMS.indexOf(b));
+        draft[scope].platforms = list;
+      }
+      renderPlatformPills(scope === "gallery" ? "gPlatformPills" : "platformPills", scope);
+      applied[scope].platforms = draft[scope].platforms.slice();
+      if (scope === "gallery") renderSkuGallery();
+      else renderTrend();
+    }
+
+    function renderPills() {
+      document.getElementById("bundlePills").innerHTML = BUNDLES.map((b) =>
+        `<button class="pill ${state.bundle === b ? "on" : ""}" data-b="${b}">${b}</button>`
+      ).join("");
+      const types = typesOf();
+      const typeEl = document.getElementById("typePills");
+      if (!types.length) {
+        typeEl.innerHTML = "";
+      } else {
+        const all = ["全部", ...types];
+        typeEl.innerHTML = all.map((t) =>
+          `<button class="pill sm ${state.type === t ? "on" : ""}" data-t="${t}">${t}</button>`
+        ).join("");
+      }
+      renderPlatformPills("platformPills", "trend");
+    }
+
+    function renderSelect() {
+      const rows = filtered();
+      const sku = current();
+      document.getElementById("productLabel").textContent = state.bundle + "产品";
+      document.getElementById("productSelect").innerHTML = rows.map((s) =>
+        `<option value="${s.id}" ${s.id === sku.id ? "selected" : ""}>${labelOf(s)}</option>`
+      ).join("");
+    }
+
+    function renderSku() {
+      const sku = current();
+      const filter = applied.trend;
+      const plats = filter.platforms;
+      const points = skuPoints(sku, filter);
+      const first = points[0];
+      const last = points[points.length - 1];
+      if (!first) {
+        document.getElementById("priceLine").textContent = "所选日期范围内没有价格快照";
+        document.getElementById("alertBox").className = "alert";
+        document.getElementById("alertBox").textContent = "请调整日期范围后点击确定。例如 8.9–10.1 会显示该区间内的 8.10、9.17/9.18。";
+        document.getElementById("skuKpis").innerHTML = "";
+      } else {
+        document.getElementById("priceLine").innerHTML = plats.map((p) =>
+          `${p} ${first.label}价格 <span class="old">${rp(first[p])}</span>　${last.label}价格 <span class="now">${rp(last[p])}</span>`
+        ).join("<br>");
+        const alert = document.getElementById("alertBox");
+        const d = last.price - first.price;
+        if (points.length < 2) {
+          alert.className = "alert";
+          alert.textContent = "该区间内仅一期价格，无法对比变动";
+        } else if (d > 0) {
+          alert.className = "alert";
+          alert.textContent = "注：部分优惠活动变化，导致价格变化";
+        } else if (d < 0) {
+          alert.className = "alert ok";
+          alert.textContent = last.label + " 价格低于 " + first.label + "，可能是活动力度加大或赠品组合调整";
+        } else {
+          alert.className = "alert";
+          alert.textContent = "该 SKU 在 " + first.label + " 与 " + last.label + " 的售价相同";
+        }
+        if (plats.length === 1) {
+          const p = plats[0];
+          const delta = last[p] - first[p];
+          const rate = pct(first[p], last[p]);
+          document.getElementById("skuKpis").innerHTML = kpiHtml([
+            { value: rp(first[p]), label: first.label + " " + p + " 价格" },
+            { value: rp(last[p]), label: last.label + " " + p + " 价格" },
+            { value: signed(delta), label: "变动额 (Rp)", cls: delta > 0 ? "up" : delta < 0 ? "down" : "" },
+            { value: signed(Math.round(rate * 10) / 10) + "%", label: "变动幅度", cls: delta > 0 ? "up" : delta < 0 ? "down" : "" }
+          ]);
+        } else {
+          document.getElementById("skuKpis").innerHTML = kpiHtml(plats.flatMap((p) => {
+            const delta = last[p] - first[p];
+            return [
+              { value: rp(last[p]), label: p + " " + last.label + " 价格" },
+              { value: signed(delta), label: p + " 变动额", cls: delta > 0 ? "up" : delta < 0 ? "down" : "" }
+            ];
+          }));
+        }
+      }
+      document.getElementById("skuMeta").innerHTML =
+        `<div class="sku-line product"><span class="k">产品</span>${sku.product}</div>` +
+        `<div class="sku-line"><span class="k">赠品</span>${sku.gift || "无赠品"}</div>` +
+        `<div class="sku-line"><span class="k">平台</span>${platTags(plats)}</div>` +
+        (sku.type ? `<div class="sku-line"><span class="k">类型</span>${sku.type}</div>` : "");
+    }
+
+    function valueLabelPlugin(compact) {
+      return {
+        id: "valueLabels",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          ctx.save();
+          let sets = chart.data.datasets
+            .map((ds, di) => ({ ds, di, meta: chart.getDatasetMeta(di) }))
+            .filter((x) => x.ds.type !== "line" && !x.meta.hidden);
+          if (!sets.length) {
+            sets = chart.data.datasets
+              .map((ds, di) => ({ ds, di, meta: chart.getDatasetMeta(di) }))
+              .filter((x) => !x.meta.hidden);
+          }
+          sets.forEach((item, si) => {
+            const n = item.meta.data.length;
+            const crowded = compact || sets.length > 1;
+            const short = crowded || n > 3;
+            ctx.fillStyle = item.ds.borderColor || "#e56b12";
+            ctx.font = compact
+              ? "600 10px Microsoft YaHei, sans-serif"
+              : "600 12px Microsoft YaHei, sans-serif";
+            const last = n - 1;
+            item.meta.data.forEach((pt, i) => {
+              const v = item.ds.data[i];
+              if (v == null) return;
+              if (crowded && n > 3 && i !== 0 && i !== last) return;
+              ctx.textAlign = i === 0 && sets.length === 1 ? "left"
+                : i === last && sets.length === 1 ? "right" : "center";
+              const x = (i === 0 && sets.length === 1) ? pt.x + 4
+                : (i === last && sets.length === 1) ? pt.x - 4 : pt.x;
+              const yOff = compact ? -8 : (si === 0 ? -8 : -18);
+              ctx.fillText(short ? rpChart(v) : rp(v), x, pt.y + yOff);
+            });
+          });
+          ctx.restore();
+        }
+      };
+    }
+
+    function drawCombo(canvas, points, existing, compact, platforms, lineOnly) {
+      if (existing) existing.destroy();
+      if (!canvas || !points.length) return null;
+      const plats = platforms && platforms.length ? platforms : ["SP"];
+      const labels = points.map((p) => p.label);
+      const many = points.length >= 5 || plats.length > 1;
+      let datasets;
+      if (lineOnly) {
+        datasets = plats.map((p) => {
+          const color = plats.length === 1 ? "#e56b12" : PLATFORM_STYLE[p].line;
+          return {
+            type: "line",
+            label: p,
+            data: points.map((pt) => pt[p]),
+            borderColor: color,
+            backgroundColor: plats.length === 1 ? "rgba(229, 107, 18, 0.14)" : "transparent",
+            fill: plats.length === 1,
+            clip: false,
+            pointRadius: compact ? 3.5 : 4,
+            pointHoverRadius: compact ? 5 : 6,
+            pointBackgroundColor: "#fff",
+            pointBorderColor: color,
+            pointBorderWidth: 2,
+            borderWidth: compact ? 2.5 : 3,
+            tension: 0.25,
+            order: 1
+          };
+        });
+      } else if (plats.length === 1) {
+        const p = plats[0];
+        const data = points.map((pt) => pt[p]);
+        const colors = points.map((_, i) => BAR_COLORS[i % BAR_COLORS.length]);
+        datasets = [
+          {
+            type: "bar",
+            label: p + " 当日价格",
+            data,
+            backgroundColor: colors,
+            borderColor: "#e56b12",
+            borderRadius: 4,
+            barPercentage: many ? 0.42 : 0.5,
+            categoryPercentage: many ? 0.7 : 0.8,
+            order: 2
+          },
+          {
+            type: "line",
+            label: p + " 价格走势",
+            data,
+            borderColor: "#e56b12",
+            backgroundColor: "#e56b12",
+            clip: false,
+            pointRadius: compact ? 3 : 4,
+            pointBackgroundColor: "#fff",
+            pointBorderColor: "#e56b12",
+            pointBorderWidth: 2,
+            tension: 0.15,
+            order: 1
+          }
+        ];
+      } else {
+        datasets = plats.map((p, i) => ({
+          type: "bar",
+          label: p,
+          data: points.map((pt) => pt[p]),
+          backgroundColor: PLATFORM_STYLE[p].bar,
+          borderColor: PLATFORM_STYLE[p].line,
+          borderRadius: 4,
+          barPercentage: 0.85,
+          categoryPercentage: 0.7,
+          order: 2 + i
+        })).concat(plats.map((p, i) => ({
+          type: "line",
+          label: p + " 走势",
+          data: points.map((pt) => pt[p]),
+          borderColor: PLATFORM_STYLE[p].line,
+          backgroundColor: PLATFORM_STYLE[p].line,
+          clip: false,
+          pointRadius: compact ? 2 : 3,
+          pointBackgroundColor: "#fff",
+          pointBorderColor: PLATFORM_STYLE[p].line,
+          pointBorderWidth: 2,
+          tension: 0.15,
+          order: 1
+        })));
+      }
+      return new Chart(canvas, {
+        type: lineOnly ? "line" : "bar",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          clip: false,
+          layout: compact
+            ? { padding: { top: 18, right: 28, left: 2, bottom: 2 } }
+            : { padding: { top: 24, right: 36, left: 4, bottom: 4 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: (c) => c.dataset.label + "：" + rp(c.parsed.y) }
+            }
+          },
+          scales: {
+            x: {
+              title: compact ? { display: false } : { display: true, text: "价格变动日期", color: "#8a8178" },
+              grid: { display: false },
+              offset: !lineOnly,
+              ticks: {
+                font: { size: compact ? 10 : 12 },
+                maxRotation: 0,
+                autoSkip: false
+              }
+            },
+            y: {
+              beginAtZero: !lineOnly,
+              grace: lineOnly ? "16%" : "8%",
+              title: compact ? { display: false } : { display: true, text: "价格 (Rp)", color: "#8a8178" },
+              ticks: {
+                font: { size: compact ? 10 : 12 },
+                callback: (v) => (v >= 1000 ? Math.round(v / 1000) + "k" : v)
+              }
+            }
+          }
+        },
+        plugins: [valueLabelPlugin(compact)]
+      });
+    }
+
+    function drawDumbbell(canvas, points, existing, compact) {
+      if (existing) existing.destroy();
+      if (!canvas || !points.length) return null;
+      const labels = points.map((p) => p.label);
+      const tk = points.map((p) => p.TK);
+      const sp = points.map((p) => p.SP);
+      const nums = tk.concat(sp).filter((v) => v != null);
+      const lo = Math.min.apply(null, nums);
+      const hi = Math.max.apply(null, nums);
+      const span = hi - lo;
+      const pad = span === 0 ? Math.max(lo * 0.06, 2000) : span * 0.22;
+      const linePlugin = {
+        id: "dumbbellLines" + (canvas.id || "x"),
+        beforeDatasetsDraw(chart) {
+          const tkMeta = chart.getDatasetMeta(0);
+          const spMeta = chart.getDatasetMeta(1);
+          const ctx = chart.ctx;
+          ctx.save();
+          ctx.lineCap = "round";
+          tkMeta.data.forEach((a, i) => {
+            const b = spMeta.data[i];
+            if (!a || !b) return;
+            ctx.strokeStyle = points[i].absGap === 0 ? "#d5dced" : "#4c6fff";
+            ctx.lineWidth = compact ? 3 : 4.5;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          });
+          ctx.restore();
+        }
+      };
+      return new Chart(canvas, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "TK",
+              data: tk,
+              showLine: false,
+              pointRadius: compact ? 6 : 8,
+              pointHoverRadius: compact ? 7 : 9,
+              pointBackgroundColor: "#ffd400",
+              pointBorderColor: "#fff",
+              pointBorderWidth: compact ? 2 : 2.5,
+              order: 1
+            },
+            {
+              label: "SP",
+              data: sp,
+              showLine: false,
+              pointRadius: compact ? 5 : 6.5,
+              pointHoverRadius: compact ? 6 : 8,
+              pointBackgroundColor: "#ff4d2e",
+              pointBorderColor: "#fff",
+              pointBorderWidth: compact ? 2 : 2.5,
+              order: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          clip: false,
+          interaction: { mode: "index", intersect: false },
+          layout: compact
+            ? { padding: { top: 10, right: 8, left: 2, bottom: 2 } }
+            : { padding: { top: 16, right: 16, left: 4, bottom: 4 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => c.dataset.label + "：" + rp(c.parsed.y),
+                afterBody: (items) => {
+                  const i = items[0] && items[0].dataIndex;
+                  if (i == null) return "";
+                  const p = points[i];
+                  if (p.absGap === 0) return "两平台价格相同";
+                  return "价差 " + rp(p.absGap) + "（" + (p.TK > p.SP ? "TK" : "SP") + " 更高）";
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: compact ? 10 : 12 }, maxRotation: 0, autoSkip: false }
+            },
+            y: {
+              beginAtZero: false,
+              min: lo - pad,
+              max: hi + pad,
+              ticks: {
+                font: { size: compact ? 10 : 12 },
+                callback: (v) => (v >= 1000 ? Math.round(v / 1000) + "k" : v)
+              }
+            }
+          }
+        },
+        plugins: [linePlugin]
+      });
+    }
+
+    function renderMainChart() {
+      const sku = current();
+      const filter = applied.trend;
+      const points = skuPoints(sku, filter);
+      comboChart = drawCombo(
+        document.getElementById("comboChart"),
+        points,
+        comboChart,
+        false,
+        filter.platforms,
+        true
+      );
+      const plats = filter.platforms;
+      if (plats.length === 1) {
+        document.getElementById("chartLegend").innerHTML =
+          `<span><i class="dot circle" style="background:#e56b12"></i>${plats[0]} 价格走势</span>`;
+      } else {
+        document.getElementById("chartLegend").innerHTML =
+          plats.map((p) =>
+            `<span><i class="dot circle" style="background:${PLATFORM_STYLE[p].line}"></i>${p}</span>`
+          ).join("");
+      }
+    }
+
+    function renderSkuGallery() {
+      galleryCharts.forEach((c) => c && c.destroy());
+      galleryCharts = [];
+      const filter = applied.gallery;
+      const snaps = snapshotSeries(filter);
+      document.getElementById("gFilterNote").textContent = filterNote(filter);
+      const groups = [];
+      const map = new Map();
+      SKUS.forEach((sku) => {
+        const key = sku.bundle + "\t" + sku.product;
+        if (!map.has(key)) {
+          const g = { bundle: sku.bundle, type: sku.type, product: sku.product, items: [] };
+          map.set(key, g);
+          groups.push(g);
+        }
+        map.get(key).items.push(sku);
+      });
+      let html = "";
+      let lastBundle = "";
+      groups.forEach((g) => {
+        if (g.bundle !== lastBundle) {
+          html += `<h3 class="bundle-label">${g.bundle}</h3>`;
+          lastBundle = g.bundle;
+        }
+        const cols = Math.max(g.items.length, 2);
+        const giftNote = g.items.length > 1
+          ? g.items.length + " 种赠品组合"
+          : (g.items[0].gift ? "1 种赠品组合" : "无赠品");
+        const type = g.type ? " · " + g.type : "";
+        html += `<div class="product-group">
+          <div class="product-group-head"><b>${g.product}</b><span>${g.bundle}${type} · ${giftNote}</span></div>
+          <div class="product-row" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">`;
+        g.items.forEach((sku) => {
+          html += `<div class="sku-card">
+            <b>${sku.gift ? "赠品：" + sku.gift : "无赠品"}</b>
+            <div class="meta">${platTags(filter.platforms)}${sku.bundle}${sku.type ? " · " + sku.type : ""}</div>
+            ${snaps.length
+              ? `<div class="chart-box mini"><canvas id="g${sku.id}"></canvas></div>`
+              : `<div class="empty-card">所选日期范围内没有价格快照</div>`}
+          </div>`;
+        });
+        html += `</div></div>`;
+      });
+      document.getElementById("skuGallery").innerHTML = html;
+      if (!snaps.length) return;
+      SKUS.forEach((sku) => {
+        const points = skuPoints(sku, filter);
+        galleryCharts[sku.id] = drawCombo(
+          document.getElementById("g" + sku.id),
+          points,
+          null,
+          true,
+          filter.platforms,
+          true
+        );
+      });
+    }
+
+    function renderCompare() {
+      compareCharts.forEach((c) => c && c.destroy());
+      compareCharts = [];
+      const filter = applied.compare;
+      const snaps = snapshotSeries(filter);
+      const lastF = snaps.length ? snaps[snaps.length - 1].field : null;
+      const gapNow = lastF
+        ? SKUS.filter((s) => s.platforms.TK[lastF] !== s.platforms.SP[lastF])
+        : [];
+      const tkHi = lastF
+        ? SKUS.filter((s) => s.platforms.TK[lastF] > s.platforms.SP[lastF]).length
+        : 0;
+      const spHi = lastF
+        ? SKUS.filter((s) => s.platforms.SP[lastF] > s.platforms.TK[lastF]).length
+        : 0;
+      document.getElementById("cFilterNote").textContent =
+        `已筛选 ${filter.from ? dateShort(filter.from) : "起始"} 至 ${filter.to ? dateShort(filter.to) : "至今"} · 同时对比 TK 与 SP · 含 ${snaps.length} 期快照`;
+      document.getElementById("cKpis").innerHTML = kpiHtml([
+        { value: String(SKUS.length), label: "全部报价数" },
+        { value: String(gapNow.length), label: "最新一期有价差", cls: gapNow.length ? "up" : "" },
+        { value: String(tkHi), label: "最新一期 TK 更高" },
+        { value: String(spHi), label: "最新一期 SP 更高" }
+      ]);
+      const bundles = ["全部"].concat(BUNDLES);
+      document.getElementById("cBundlePills").innerHTML = bundles.map((b) =>
+        `<button type="button" class="pill ${state.compareBundle === b ? "on" : ""}" data-cb="${b}">${b}</button>`
+      ).join("");
+      document.getElementById("cGapPills").innerHTML = [
+        ["all", "全部报价"],
+        ["gap", "仅看有价差"]
+      ].map((p) =>
+        `<button type="button" class="pill sm ${(p[0] === "gap") === state.compareOnlyGap ? "on" : ""}" data-gap="${p[0]}">${p[1]}</button>`
+      ).join("");
+      let rows = SKUS;
+      if (state.compareBundle !== "全部") rows = rows.filter((s) => s.bundle === state.compareBundle);
+      if (state.compareOnlyGap) rows = rows.filter((s) => skuHasGap(s, filter));
+      const groups = [];
+      const map = new Map();
+      rows.forEach((sku) => {
+        const key = sku.bundle + "\t" + sku.product;
+        if (!map.has(key)) {
+          const g = { bundle: sku.bundle, type: sku.type, product: sku.product, items: [] };
+          map.set(key, g);
+          groups.push(g);
+        }
+        map.get(key).items.push(sku);
+      });
+      if (!groups.length) {
+        document.getElementById("compareGallery").innerHTML =
+          `<div class="empty-card">${snaps.length ? "当前筛选下没有报价" : "所选日期范围内没有价格快照"}</div>`;
+        return;
+      }
+      let html = "";
+      let lastBundle = "";
+      groups.forEach((g) => {
+        if (g.bundle !== lastBundle) {
+          html += `<h3 class="bundle-label">${g.bundle}</h3>`;
+          lastBundle = g.bundle;
+        }
+        const cols = Math.max(g.items.length, 2);
+        html += `<div class="product-group">
+          <div class="product-group-head"><b>${g.product}</b><span>${g.bundle}${g.type ? " · " + g.type : ""}</span></div>
+          <div class="product-row" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">`;
+        g.items.forEach((sku) => {
+          const points = comparePoints(sku, filter);
+          const last = points[points.length - 1];
+          let gapHtml = `<div class="gap-line same">所选日期范围内没有价格快照</div>`;
+          if (last) {
+            if (last.absGap === 0) gapHtml = `<div class="gap-line same">最新一期两平台同价 ${rp(last.TK)}</div>`;
+            else if (last.TK > last.SP) gapHtml = `<div class="gap-line tk">最新价差 ${rp(last.absGap)} · TK 更高</div>`;
+            else gapHtml = `<div class="gap-line sp">最新价差 ${rp(last.absGap)} · SP 更高</div>`;
+          }
+          html += `<div class="sku-card compare-card">
+            <b>${sku.gift ? "赠品：" + sku.gift : "无赠品"}</b>
+            <div class="meta">${platTags(["TK", "SP"])}${sku.bundle}${sku.type ? " · " + sku.type : ""}</div>
+            ${gapHtml}
+            ${snaps.length
+              ? `<div class="chart-box mini"><canvas id="c${sku.id}"></canvas></div>`
+              : `<div class="empty-card">所选日期范围内没有价格快照</div>`}
+          </div>`;
+        });
+        html += `</div></div>`;
+      });
+      document.getElementById("compareGallery").innerHTML = html;
+      if (!snaps.length) return;
+      rows.forEach((sku) => {
+        compareCharts[sku.id] = drawDumbbell(
+          document.getElementById("c" + sku.id),
+          comparePoints(sku, filter),
+          null,
+          true
+        );
+      });
+    }
+
+    function showBoard(name) {
+      state.board = name;
+      document.querySelectorAll(".board-tab").forEach((btn) => {
+        btn.classList.toggle("on", btn.dataset.board === name);
+      });
+      document.getElementById("board-gallery").classList.toggle("on", name === "gallery");
+      document.getElementById("board-compare").classList.toggle("on", name === "compare");
+      document.getElementById("board-trend").classList.toggle("on", name === "trend");
+      if (name === "trend") {
+        const canvas = document.getElementById("comboChart");
+        void canvas.offsetWidth;
+        renderTrend();
+      } else if (name === "compare") {
+        renderCompare();
+      } else {
+        galleryCharts.forEach((c) => c && c.resize());
+      }
+    }
+
+    function renderTrend() {
+      const filter = applied.trend;
+      const plats = filter.platforms;
+      const series = snapshotSeries(filter);
+      const firstF = series[0] && series[0].field;
+      const lastF = series.length ? series[series.length - 1].field : null;
+      const rows = SKUS;
+      const up = firstF ? rows.filter((s) => avgPrice(s, plats, lastF) > avgPrice(s, plats, firstF)).length : 0;
+      const down = firstF ? rows.filter((s) => avgPrice(s, plats, lastF) < avgPrice(s, plats, firstF)).length : 0;
+      const flat = firstF ? rows.filter((s) => avgPrice(s, plats, lastF) === avgPrice(s, plats, firstF)).length : 0;
+      document.getElementById("allKpis").innerHTML = kpiHtml([
+        { value: String(rows.length), label: "全部报价数" },
+        { value: String(up), label: "涨价 SKU", cls: "up" },
+        { value: String(down), label: "降价 SKU", cls: "down" },
+        { value: String(flat), label: "持平 SKU" }
+      ]);
+      const sku = current();
+      if (sku) state.id = sku.id;
+      renderPills();
+      renderSelect();
+      renderSku();
+      renderMainChart();
+    }
+
+    function applyGallery() {
+      const dates = readDates("gDateFrom", "gDateTo");
+      draft.gallery.from = dates.from;
+      draft.gallery.to = dates.to;
+      applied.gallery = copyFilter(draft.gallery);
+      renderSkuGallery();
+    }
+    function applyCompare() {
+      const dates = readDates("cDateFrom", "cDateTo");
+      draft.compare.from = dates.from;
+      draft.compare.to = dates.to;
+      applied.compare = copyFilter(draft.compare);
+      renderCompare();
+    }
+    function applyTrend() {
+      const dates = readDates("dateFrom", "dateTo");
+      draft.trend.from = dates.from;
+      draft.trend.to = dates.to;
+      applied.trend = copyFilter(draft.trend);
+      const first = SKUS.find((s) => s.bundle === state.bundle) || SKUS[0];
+      if (first) {
+        state.id = first.id;
+        state.type = "全部";
+      }
+      renderTrend();
+    }
+
+    document.getElementById("boardTabs").addEventListener("click", (e) => {
+      const board = e.target.dataset.board;
+      if (!board || board === state.board) return;
+      showBoard(board);
+    });
+    document.getElementById("gApplyBtn").addEventListener("click", applyGallery);
+    document.getElementById("cApplyBtn").addEventListener("click", applyCompare);
+    document.getElementById("applyBtn").addEventListener("click", applyTrend);
+    document.getElementById("gPlatformPills").addEventListener("click", (e) => {
+      const p = e.target.dataset.p;
+      if (!p) return;
+      togglePlatform("gallery", p);
+    });
+    document.getElementById("platformPills").addEventListener("click", (e) => {
+      const p = e.target.dataset.p;
+      if (!p) return;
+      togglePlatform("trend", p);
+    });
+    document.getElementById("cBundlePills").addEventListener("click", (e) => {
+      const b = e.target.dataset.cb;
+      if (!b) return;
+      state.compareBundle = b;
+      renderCompare();
+    });
+    document.getElementById("cGapPills").addEventListener("click", (e) => {
+      const g = e.target.dataset.gap;
+      if (!g) return;
+      state.compareOnlyGap = g === "gap";
+      renderCompare();
+    });
+    document.getElementById("bundlePills").addEventListener("click", (e) => {
+      const b = e.target.dataset.b;
+      if (!b) return;
+      state.bundle = b;
+      state.type = "全部";
+      state.id = SKUS.find((s) => s.bundle === b).id;
+      renderTrend();
+    });
+    document.getElementById("typePills").addEventListener("click", (e) => {
+      const t = e.target.dataset.t;
+      if (!t) return;
+      state.type = t;
+      const first = t === "全部"
+        ? inBundle()[0]
+        : inBundle().find((s) => s.type === t);
+      if (first) state.id = first.id;
+      renderTrend();
+    });
+    document.getElementById("productSelect").addEventListener("change", (e) => {
+      state.id = e.target.value;
+      renderTrend();
+    });
+
+    if (typeof Chart === "undefined") {
+      document.querySelector(".wrap").insertAdjacentHTML(
+        "afterbegin",
+        '<div class="alert">图表库未加载，请检查网络后刷新。筛选和表格仍可使用。</div>'
+      );
+    }
+
+    const fromInit = SNAPSHOTS[0].date;
+    const toInit = todayISO();
+    ["gDateFrom", "dateFrom", "cDateFrom"].forEach((id) => { document.getElementById(id).value = fromInit; });
+    ["gDateTo", "dateTo", "cDateTo"].forEach((id) => { document.getElementById(id).value = toInit; });
+    ["gallery", "trend", "compare"].forEach((scope) => {
+      draft[scope].from = fromInit;
+      draft[scope].to = toInit;
+      applied[scope] = copyFilter(draft[scope]);
+    });
+    const PACK = {"v":1,"iter":120000,"salt":"AePAQB7wQ5JDgNEqT2doOw==","iv":"r6nkhPcW3enNQmVY","tag":"oRYKl/au/AZmHxf4oau66w==","data":"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"};
+    function b64(s) {
+      const bin = atob(s);
+      const u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return u;
+    }
+    async function decryptRaw(pw) {
+      const enc = new TextEncoder();
+      const material = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: b64(PACK.salt), iterations: PACK.iter, hash: "SHA-256" },
+        material,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["decrypt"]
+      );
+      const packed = new Uint8Array(b64(PACK.data).length + b64(PACK.tag).length);
+      packed.set(b64(PACK.data), 0);
+      packed.set(b64(PACK.tag), b64(PACK.data).length);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(PACK.iv) }, key, packed);
+      return JSON.parse(new TextDecoder().decode(pt));
+    }
+    async function unlock(pw) {
+      RAW = await decryptRaw(pw);
+      buildSkus();
+      document.body.classList.remove("locked");
+      renderPlatformPills("gPlatformPills", "gallery");
+      renderPlatformPills("platformPills", "trend");
+      renderSkuGallery();
+      renderCompare();
+      renderTrend();
+    }
+    document.getElementById("gateForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const err = document.getElementById("gateErr");
+      err.textContent = "";
+      const pw = document.getElementById("gatePw").value;
+      try {
+        await unlock(pw);
+      } catch (ex) {
+        err.textContent = "密码不正确";
+        document.getElementById("gatePw").value = "";
+        document.getElementById("gatePw").focus();
+      }
+    });
+    document.getElementById("gatePw").focus();
+  </script>
+</body>
+</html>
